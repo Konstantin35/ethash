@@ -125,13 +125,13 @@ type Light struct {
 }
 
 // Verify checks whether the block's nonce is valid.
-func (l *Light) Verify(block Block) (bool, string, int64) {
+func (l *Light) Verify(block Block) bool {
 	// TODO: do ethash_quick_verify before getCache in order
 	// to prevent DOS attacks.
 	blockNum := block.NumberU64()
 	if blockNum >= epochLength*2048 {
 		log.Debug(fmt.Sprintf("block number %d too high, limit is %d", epochLength*2048))
-		return false, "", 0
+		return false
 	}
 
 	difficulty := block.Difficulty()
@@ -142,7 +142,7 @@ func (l *Light) Verify(block Block) (bool, string, int64) {
 	*/
 	if difficulty.Cmp(common.Big0) == 0 {
 		log.Debug("invalid block difficulty")
-		return false, "", 0
+		return false
 	}
 
 	cache := l.getCache(blockNum)
@@ -153,18 +153,17 @@ func (l *Light) Verify(block Block) (bool, string, int64) {
 	// Recompute the hash using the cache.
 	ok, mixDigest, result := cache.compute(uint64(dagSize), block.HashNoNonce(), block.Nonce())
 	if !ok {
-		return false, "", 0
+		return false
+	}
+
+	// avoid mixdigest malleability as it's not included in a block's "hashNononce"
+	if block.MixDigest() != mixDigest {
+		return false
 	}
 
 	// The actual check.
 	target := new(big.Int).Div(maxUint256, difficulty)
-	ret := result.Big().Cmp(target) <= 0
-	actualDiff := new(big.Int).Div(maxUint256, result.Big())
-	if ret {
-		return ret, mixDigest.Hex(), actualDiff.Int64()
-	} else {
-		return ret, "", 0
-	}
+	return result.Big().Cmp(target) <= 0
 }
 
 func h256ToHash(in C.ethash_h256_t) common.Hash {
@@ -434,7 +433,7 @@ func GetSeedHash(blockNum uint64) ([]byte, error) {
 
 func makeSeedHash(epoch uint64) (sh common.Hash) {
 	for ; epoch > 0; epoch-- {
-		sh = crypto.Keccak256Hash(sh[:])
+		sh = crypto.Sha3Hash(sh[:])
 	}
 	return sh
 }
