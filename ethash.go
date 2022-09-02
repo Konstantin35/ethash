@@ -166,6 +166,12 @@ func (l *Light) Verify(block Block) bool {
 	return result.Big().Cmp(target) <= 0
 }
 
+func (l *Light) Compute(blockNum uint64, hashNoNonce common.Hash, nonce uint64) (ok bool, mixDigest, result common.Hash) {
+	cache := l.getCache(blockNum)
+	dagSize := C.ethash_get_datasize(C.uint64_t(blockNum))
+	return cache.compute(uint64(dagSize), hashNoNonce, nonce)
+}
+
 func h256ToHash(in C.ethash_h256_t) common.Hash {
 	return *(*common.Hash)(unsafe.Pointer(&in.b))
 }
